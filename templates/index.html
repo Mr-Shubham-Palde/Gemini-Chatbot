@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini 2.0 Flash</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background-color: #212121; color: white; display: flex; height: 100vh; }
+
+        .main-container { display: flex; width: 100%; }
+
+        /* Sidebar */
+        .sidebar { width: 260px; background-color: #171717; padding: 15px; display: flex; flex-direction: column; }
+        .new-chat { background: transparent; color: white; border: 1px solid #4d4d4d; padding: 10px; border-radius: 5px; cursor: pointer; text-align: left; margin-bottom: 20px; }
+        .history-label { font-size: 12px; color: #666; margin-bottom: 10px; }
+        .history-item { padding: 8px; font-size: 14px; cursor: pointer; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .history-item:hover { background-color: #2f2f2f; }
+
+        /* Chat Area */
+        .chat-area { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+        .chat-box { width: 100%; max-width: 800px; flex: 1; overflow-y: auto; padding: 40px 20px; display: flex; flex-direction: column; gap: 20px; }
+
+        /* Message Bubbles */
+        .message { max-width: 80%; padding: 12px 16px; border-radius: 15px; line-height: 1.5; font-size: 16px; }
+        .user { align-self: flex-end; background-color: #303030; color: white; }
+        .bot { align-self: flex-start; background-color: transparent; color: #ececec; }
+
+        /* Input Styling */
+        .input-wrapper { width: 100%; max-width: 800px; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .input-container { width: 100%; position: relative; background: #303030; border-radius: 25px; padding: 10px 15px; display: flex; align-items: center; }
+        input { flex: 1; background: transparent; border: none; color: white; padding: 10px; outline: none; font-size: 16px; }
+        #send-btn { background: white; color: black; border: none; width: 35px; height: 35px; border-radius: 50%; font-weight: bold; cursor: pointer; }
+        .disclaimer { font-size: 12px; color: #888; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="sidebar">
+            <button class="new-chat" onclick="newSession()">+ New Session</button>
+            <div class="history-label">Memory Status: Active</div>
+        </div>
+
+        <div class="chat-area">
+            <div id="chat-box" class="chat-box">
+                {% for role, content in chat_history %}
+                    <div class="message {{ 'user' if role == 'user' else 'bot' }}">
+                        {{ content }}
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="input-wrapper">
+                <div class="input-container">
+                    <input type="text" id="user-input" placeholder="Message Gemini...">
+                    <button onclick="sendMessage()" id="send-btn">↑</button>
+                </div>
+                <p class="disclaimer">Powered by Gemini & LangChain Persistence</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Flask passes session_id to template
+        let session_id = "{{ session_id }}";
+
+        async function sendMessage() {
+            const inputField = document.getElementById('user-input');
+            const chatBox = document.getElementById('chat-box');
+            const message = inputField.value;
+
+            if (!message) return;
+
+            // Show user message
+            chatBox.innerHTML += `<div class="message user">${message}</div>`;
+            inputField.value = '';
+
+            // Show "Thinking..." placeholder
+            const loadingId = "load-" + Date.now();
+            chatBox.innerHTML += `<div class="message bot" id="${loadingId}">Thinking...</div>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // Send message + session_id to backend
+            const response = await fetch('/get_response', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: message, session_id: session_id })
+            });
+
+            const data = await response.json();
+            document.getElementById(loadingId).innerText = data.response || data.error;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function newSession() {
+            fetch('/clear_chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: session_id })
+            })
+            .then(res => res.json())
+            .then(data => {
+                console.log(data);
+                // Clear chat visually and request a new session from Flask
+                location.reload();
+            });
+        }
+
+        // Press Enter to send message
+        document.getElementById("user-input").addEventListener("keypress", (e) => {
+            if (e.key === "Enter") sendMessage();
+        });
+    </script>
+</body>
+</html>
